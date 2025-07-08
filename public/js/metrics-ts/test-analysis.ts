@@ -63,10 +63,14 @@ interface SelectorTypeDistribution {
   counts: number[];
 }
 
-// Erweiterung des globalen Window-Objekts für Chart.js
+// Erweiterung des globalen Window-Objekts für Chart.js und TestAnalysisView
 declare global {
   interface Window {
     Chart: typeof Chart;
+    TestAnalysisView: {
+      init: () => void;
+      loadTestAnalysis: () => Promise<void>;
+    }
   }
 }
 
@@ -152,97 +156,118 @@ document.addEventListener('DOMContentLoaded', function() {
 /**
  * Test-Analyse ausführen
  */
-function runTestAnalysis(): void {
-  // UI-Status aktualisieren
+async function runTestAnalysis(): Promise<void> {
+  if (!analysisSpinner || !analysisStatus) return;
+
   showAnalysisLoading(true);
-  updateAnalysisStatus('info', 'Test-Analyse wird ausgeführt...');
-  
-  console.log('Test-Analyse API-Aufruf gestartet...');
-  
-  // API-Aufruf zur Analyse der Tests
-  fetch('/api/test-analysis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}) // Leeres Objekt, kann später mit Optionen erweitert werden
-  })
-  .then(response => {
-    console.log('API-Antwort erhalten:', response.status, response.statusText);
+  updateAnalysisStatus('info', 'Führe Test-Analyse durch...');
+
+  try {
+    // API-Aufruf zur Test-Analyse
+    const response = await fetch('/api/test-analysis', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({}) // Leeres Objekt, kann später mit Optionen erweitert werden
+    });
+    
     if (!response.ok) {
-      throw new Error('Fehler bei der Analyse: ' + response.statusText);
+      throw new Error(`HTTP-Fehler: ${response.status}`);
     }
-    return response.json();
-  })
-  .then((data: AnalysisData) => {
-    // Debug-Informationen
-    console.log('API-Daten erhalten:', data);
-    console.log('Test-Metadaten vorhanden:', Array.isArray(data.testMetadata), 
-              'Anzahl Tests:', data.testMetadata ? data.testMetadata.length : 0);
-    console.log('Coverage-Matrix vorhanden:', !!data.coverageMatrix, 
-              'Anzahl Bereiche:', data.coverageMatrix?.areas?.length || 0);
     
-    // Analyseergebnisse anzeigen
-    updateAnalysisStatus('success', 'Analyse abgeschlossen!');
-    
-    if (!data.testMetadata || !Array.isArray(data.testMetadata)) {
-      console.error('Ungültiges Format der Testmetadaten:', data.testMetadata);
-      updateAnalysisStatus('warning', 'Keine gültigen Testdaten erhalten');
-      return;
-    }
+    const data: AnalysisData = await response.json();
+    console.log('Analyse-Daten erhalten:', data);
     
     try {
-      displayTestMetadata(data.testMetadata || []);
-      displayCoverageMatrix(data.coverageMatrix || {});
+      // Testmetadaten anzeigen
+      if (data.testMetadata) {
+        displayTestMetadata(data.testMetadata);
+      }
+      
+      // Abdeckungsmatrix anzeigen
+      if (data.coverageMatrix) {
+        displayCoverageMatrix(data.coverageMatrix);
+      }
+      
+      // Qualitätsmetriken anzeigen
       displayQualityMetrics(data);
+      
+      // Diagramme initialisieren
       initCharts(data);
       
       // Erfolgs-Nachricht mit Details
-      const testCount = data.testMetadata.length;
-      if (analysisStatus) {
-        analysisStatus.innerHTML = 
-          `<div class="alert alert-success">
-            <strong>Analyse abgeschlossen!</strong> 
-            ${testCount} Tests gefunden und analysiert.
-          </div>`;
-      }
+      const testCount = data.testMetadata?.length || 0;
+      updateAnalysisStatus('success', `Analyse erfolgreich abgeschlossen. ${testCount} Tests analysiert.`);
+      
+      // Ergebnisse lokal speichern für schnelleren Zugriff
+      localStorage.setItem('testAnalysisResults', JSON.stringify(data));
+      
+      // Erfolgs-Event auslösen
+      const successEvent = new CustomEvent('analysis-success', {
+        detail: { data }
+      });
+      document.dispatchEvent(successEvent);
     } catch (displayError: any) {
       console.error('Fehler beim Anzeigen der Daten:', displayError);
       updateAnalysisStatus('warning', `Fehler bei der Datenanzeige: ${displayError.message}`);
+      
+      // Fehler-Event auslösen
+      const errorEvent = new CustomEvent('analysis-error', {
+        detail: { message: displayError.message }
+      });
+      document.dispatchEvent(errorEvent);
     }
-  })
-  .catch((error: Error) => {
+  } catch (error: any) {
     console.error('Fehler bei der Test-Analyse:', error);
     updateAnalysisStatus('danger', `Fehler bei der Analyse: ${error.message}`);
-  })
-  .finally(() => {
+    
+    // Fehler-Event auslösen
+    const errorEvent = new CustomEvent('analysis-error', {
+      detail: { message: error.message }
+    });
+    document.dispatchEvent(errorEvent);
+  } finally {
     // Lade-Status zurücksetzen
     showAnalysisLoading(false);
-  });
+  }
 }
 
 /**
  * Gespeicherte Analyseergebnisse laden
  */
-function loadAnalysisResults(): void {
-  fetch('/api/test-analysis/results')
-  .then(response => {
+async function loadAnalysisResults(): Promise<void> {
+  try {
+    const response = await fetch('/api/test-analysis/results');
+    
     if (!response.ok) {
       throw new Error('Keine gespeicherten Ergebnisse verfügbar');
     }
-    return response.json();
-  })
-  .then((data: AnalysisData) => {
+    
+    const data: AnalysisData = await response.json();
+    
     if (data && data.testMetadata && data.testMetadata.length > 0) {
       updateAnalysisStatus('info', 'Letzte Analyseergebnisse geladen');
       displayTestMetadata(data.testMetadata || []);
       displayCoverageMatrix(data.coverageMatrix || {});
       displayQualityMetrics(data);
       initCharts(data);
+      
+      // Erfolgs-Event auslösen
+      const successEvent = new CustomEvent('analysis-success', {
+        detail: { data }
+      });
+      document.dispatchEvent(successEvent);
     }
-  })
-  .catch(error => {
+  } catch (error: any) {
     console.log('Keine gespeicherten Analyseergebnisse:', error.message);
     // Kein Error-Status nötig, da es normal ist, keine Ergebnisse zu haben
-  });
+    // Trotzdem ein Event auslösen für Debugging-Zwecke
+    const infoEvent = new CustomEvent('analysis-info', {
+      detail: { message: 'Keine gespeicherten Analyseergebnisse vorhanden.' }
+    });
+    document.dispatchEvent(infoEvent);
+  }
 }
 
 /**
@@ -831,6 +856,14 @@ function formatStatus(status: string): string {
     default: return 'Information';
   }
 }
+
+// Global verfügbar machen
+window.TestAnalysisView = {
+  init: function() {
+    loadAnalysisResults();
+  },
+  loadTestAnalysis: runTestAnalysis
+};
 
 /**
  * Test-Metadaten filtern nach Typ und Suchbegriff

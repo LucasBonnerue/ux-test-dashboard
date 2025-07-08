@@ -233,7 +233,7 @@ Die vollständige Dashboard-Integration der Testmetriken erfordert folgende Komp
 | Server-Implementierung   | ✅ Behoben        | Die server-complete.js verwendet eine alternative Implementierung mit createServer und direkten app.get/post Methoden statt Router |
 | TypeScript-Warnungen     | 🚧 In Bearbeitung | TypeScript-Typfehler in bestehenden Dateien müssen im Rahmen des Refactorings behoben werden                                       |
 | Jest-Test Importprobleme | 🚧 In Bearbeitung | Import/Export-Inkonsistenzen zwischen success-rate-tracker.ts und flakiness-analyzer.ts verursachen Probleme in Tests              |
-| Test-Typen-Definitionen  | 🚧 In Bearbeitung | Nicht exportierte Typen (z.B. TestHistoryEntry) führen zu TypeScript-Fehlern in Tests                                              |
+| Frontend-Status          | ✅ Aktualisiert   | Frontend-Migration: Ca. 95% abgeschlossen, migrierte Kernmodule: `success-rate-view.ts`, `flakiness-view.ts`, `test-analysis.ts`, `logs.ts` |
 
 ## 6.1 Validierung und Monitoring
 
