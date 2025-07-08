@@ -5,9 +5,9 @@
  * Teil der inkrementellen Migration von JS zu TS
  */
 
-import express from "express";
+import express, { Application, NextFunction, Request, Response } from "express";
+import { createServer, Server } from "http";
 import * as path from "path";
-import { createServer } from "http";
 import { Logger, createLogger } from "./utils/logger";
 import { createTestMetricsRouter } from "./routes/test-metrics";
 import { createPlaywrightResultsRouter } from "./routes/playwright-results";
@@ -98,7 +98,7 @@ export class DashboardServer {
    * Startet den Server und gibt den HTTP-Server-Handle zurück
    * @returns HTTP-Server-Instanz
    */
-  public start(): Promise<http.Server> {
+  public start(): Promise<Server> {
     const { port, host } = this.config;
     return this.startServer(port);
   }
@@ -108,7 +108,7 @@ export class DashboardServer {
    * @param port Port, auf dem der Server gestartet werden soll
    * @returns Promise mit dem HTTP-Server
    */
-  private startServer(port: number): Promise<http.Server> {
+  private startServer(port: number): Promise<Server> {
     return new Promise((resolve, reject) => {
       const server = createServer(this.app);
       const { host } = this.config;

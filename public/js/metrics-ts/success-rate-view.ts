@@ -3,6 +3,7 @@
  *
  * TypeScript für die Visualisierung der Erfolgsraten von Tests.
  * Enthält Funktionen zum Laden und Darstellen von Erfolgsraten-Daten.
+ * Verwendet das Event-basierte Kommunikationssystem für eine bessere Modularisierung.
  */
 
 // Status für Daten und UI-Elemente
@@ -25,6 +26,29 @@ let dateRangeSelector: HTMLSelectElement | null = null;
 let successRateChart: Chart | null = null;
 
 /**
+ * Event-Typen für die Erfolgsraten-Komponente
+ */
+type SuccessRateEventType =
+  | 'success-rate:loading'
+  | 'success-rate:loaded'
+  | 'success-rate:error'
+  | 'success-rate:time-range-changed';
+
+/**
+ * Event-Details für Erfolgsraten-Events
+ */
+interface SuccessRateEventDetail {
+  source: string;
+  message?: string;
+  data?: unknown;
+  error?: Error | unknown;
+  timeRange?: {
+    start: Date;
+    end: Date;
+  };
+}
+
+/**
  * Initialisierung beim Laden der Seite
  */
 document.addEventListener("DOMContentLoaded", (): void => {
@@ -45,11 +69,65 @@ document.addEventListener("DOMContentLoaded", (): void => {
 });
 
 /**
+ * Sendet ein Erfolgsraten-Event
+ */
+function dispatchSuccessRateEvent(eventType: SuccessRateEventType, detail: Partial<SuccessRateEventDetail>): void {
+  // Standardwerte hinzufügen
+  const fullDetail = {
+    source: 'SuccessRateView',
+    ...detail
+  };
+  
+  // Event erstellen und senden
+  const event = new CustomEvent(eventType, {
+    bubbles: true,
+    cancelable: true,
+    detail: fullDetail
+  });
+  
+  // Spezifisches Event senden
+  document.dispatchEvent(event);
+  
+  // Auch standardisiertes Dashboard-Event senden
+  let dashboardEventType: string;
+  
+  switch(eventType) {
+    case 'success-rate:loading':
+      dashboardEventType = 'data:loading';
+      break;
+    case 'success-rate:loaded':
+      dashboardEventType = 'data:loaded';
+      break;
+    case 'success-rate:error':
+      dashboardEventType = 'data:error';
+      break;
+    default:
+      // Kein standardisiertes Event für andere Typen
+      return;
+  }
+  
+  const dashboardEvent = new CustomEvent(dashboardEventType, {
+    bubbles: true,
+    cancelable: true,
+    detail: fullDetail
+  });
+  
+  document.dispatchEvent(dashboardEvent);
+  console.debug(`Event "${eventType}" gesendet von SuccessRateView:`, fullDetail);
+}
+
+/**
  * Lädt die Erfolgsraten vom Server
  */
 async function loadSuccessRates(): Promise<void> {
   showLoading(true);
   showError(false);
+  
+  // Loading-Event senden
+  dispatchSuccessRateEvent('success-rate:loading', {
+    message: 'Lade Erfolgsraten...',
+    timeRange: currentTimeRange
+  });
 
   try {
     // Anzahl der Tage aus dem aktuellen Zeitraum berechnen
@@ -72,15 +150,25 @@ async function loadSuccessRates(): Promise<void> {
     // Daten speichern und anzeigen
     successRates = data.testSuccessRates;
     displaySuccessRates(data);
+    
+    // Erfolg-Event senden
+    dispatchSuccessRateEvent('success-rate:loaded', {
+      message: `Erfolgsraten für ${data.testSuccessRates?.length || 0} Tests geladen`,
+      data
+    });
 
     // Trenddaten laden
     loadSuccessTrends();
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
     console.error("Fehler beim Laden der Erfolgsraten:", error);
-    showError(
-      true,
-      `Fehler beim Laden der Erfolgsraten: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
-    );
+    showError(true, `Fehler beim Laden der Erfolgsraten: ${errorMessage}`);
+    
+    // Fehler-Event senden
+    dispatchSuccessRateEvent('success-rate:error', {
+      message: `Fehler beim Laden der Erfolgsraten: ${errorMessage}`,
+      error
+    });
   } finally {
     showLoading(false);
   }
@@ -91,6 +179,12 @@ async function loadSuccessRates(): Promise<void> {
  */
 async function loadSuccessTrends(): Promise<void> {
   try {
+    // Loading-Event senden (keine UI-Anzeige, da nachgelagerte Operation)
+    dispatchSuccessRateEvent('success-rate:loading', {
+      message: 'Lade Erfolgsraten-Trends...',
+      timeRange: currentTimeRange
+    });
+    
     // Anzahl der Tage aus dem aktuellen Zeitraum berechnen
     const days: number = Math.ceil(
       (currentTimeRange.end.getTime() - currentTimeRange.start.getTime()) / (24 * 60 * 60 * 1000),
@@ -118,9 +212,23 @@ async function loadSuccessTrends(): Promise<void> {
         }))
       };
       createTrendChart(chartData);
+      
+      // Erfolg-Event senden
+      dispatchSuccessRateEvent('success-rate:loaded', {
+        message: 'Trend-Daten erfolgreich geladen',
+        data: data
+      });
     }
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
     console.error("Fehler beim Laden der Trend-Daten:", error);
+    
+    // Fehler-Event senden, aber UI nicht überladen
+    dispatchSuccessRateEvent('success-rate:error', {
+      message: `Fehler beim Laden der Trend-Daten: ${errorMessage}`,
+      error
+    });
+    
     // Hier nur in Konsole loggen, um UI nicht zu überladen
   }
 }
@@ -363,6 +471,12 @@ function handleDateRangeChange(event: Event): void {
     start,
     end: now,
   };
+  
+  // Event für Zeitraumwechsel auslösen
+  dispatchSuccessRateEvent('success-rate:time-range-changed', {
+    message: `Zeitraum geändert: ${range}`,
+    timeRange: currentTimeRange
+  });
 
   loadSuccessRates();
 }
@@ -423,6 +537,39 @@ function getTrendIndicator(trend: string): string {
 }
 
 // Export für globale Verwendung
+// Listener für Dashboard-Events registrieren
+document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('data:loading', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die dieses Modul betreffen
+    if (customEvent.detail.source === 'SuccessRateView') {
+      console.log('Erfolgsraten: Ladevorgang gestartet');
+      showLoading(true);
+    }
+  });
+  
+  document.addEventListener('data:loaded', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die dieses Modul betreffen
+    if (customEvent.detail.source === 'SuccessRateView') {
+      console.log('Erfolgsraten: Daten erfolgreich geladen');
+      showLoading(false);
+    }
+  });
+  
+  document.addEventListener('data:error', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die dieses Modul betreffen
+    if (customEvent.detail.source === 'SuccessRateView') {
+      console.error('Erfolgsraten: Fehler beim Laden der Daten:', customEvent.detail.message);
+      showError(true, customEvent.detail.message || 'Unbekannter Fehler');
+    }
+  });
+});
+
 interface SuccessRateViewInterface {
   loadSuccessRates: () => Promise<void>;
   loadSuccessTrends: () => Promise<void>;
@@ -440,6 +587,13 @@ window.SuccessRateView = {
   loadSuccessTrends,
   setTimeRange: (start: Date, end: Date): void => {
     currentTimeRange = { start, end };
+    
+    // Event für Zeitraumwechsel auslösen
+    dispatchSuccessRateEvent('success-rate:time-range-changed', {
+      message: `Zeitraum manuell gesetzt: ${start.toISOString().split('T')[0]} bis ${end.toISOString().split('T')[0]}`,
+      timeRange: { start, end }
+    });
+    
     loadSuccessRates();
   },
 };

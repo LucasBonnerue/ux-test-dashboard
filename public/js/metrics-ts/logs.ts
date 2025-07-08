@@ -31,14 +31,33 @@ interface LogFilters {
   component: string;
 }
 
+/**
+ * Event-Typen für die Logs-Komponente
+ */
+type LogsEventType =
+  | 'logs:loading'
+  | 'logs:loaded'
+  | 'logs:error'
+  | 'logs:cleared'
+  | 'logs:filter-changed';
+
+/**
+ * Event-Details für Logs-Events
+ */
+interface LogsEventDetail {
+  source: string;
+  message?: string;
+  data?: unknown;
+  error?: Error | unknown;
+}
+
 // Erweiterung der Window-Schnittstelle
+// Die Basis-Interface-Definition erfolgt in dashboard-init.ts
 declare global {
-  interface Window {
-    LogsViewer: {
-      refreshLogs: () => Promise<LogResponse>;
-      clearLogs: () => Promise<void>;
-      downloadLogs: () => Promise<void>;
-    };
+  interface LogsViewerModule {
+    refreshLogs: () => Promise<LogResponse>;
+    clearLogs: () => Promise<void>;
+    downloadLogs: () => Promise<void>;
   }
 }
 
@@ -80,6 +99,84 @@ document.addEventListener("DOMContentLoaded", () => {
   let autoRefreshTimer: number | null = null;
   const REFRESH_INTERVAL = 5000; // 5 Sekunden
 
+  /**
+   * Sendet ein Logs-Event an das Dashboard-Event-System
+   */
+  function dispatchLogsEvent(eventType: LogsEventType, detail: Partial<LogsEventDetail>): void {
+    // Standardwerte hinzufügen
+    const fullDetail = {
+      source: 'LogsViewer',
+      ...detail
+    };
+    
+    // Event erstellen und senden
+    const event = new CustomEvent(eventType, {
+      bubbles: true,
+      cancelable: true,
+      detail: fullDetail
+    });
+    
+    // Spezifisches Event senden
+    document.dispatchEvent(event);
+    
+    // Auch standardisiertes Dashboard-Event senden
+    let dashboardEventType: string;
+    
+    switch(eventType) {
+      case 'logs:loading':
+        dashboardEventType = 'data:loading';
+        break;
+      case 'logs:loaded':
+        dashboardEventType = 'data:loaded';
+        break;
+      case 'logs:error':
+        dashboardEventType = 'data:error';
+        break;
+      default:
+        // Kein standardisiertes Event für andere Typen
+        return;
+    }
+    
+    const dashboardEvent = new CustomEvent(dashboardEventType, {
+      bubbles: true,
+      cancelable: true,
+      detail: fullDetail
+    });
+    
+    document.dispatchEvent(dashboardEvent);
+    console.debug(`Event "${eventType}" gesendet von LogsViewer:`, fullDetail);
+  }
+  
+  // Event-Listener für Dashboard-Events
+  document.addEventListener('data:loading', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unser Modul betreffen
+    if (customEvent.detail.source === 'LogsViewer') {
+      console.log('Logs: Ladevorgang gestartet');
+      // Zeige Ladeanimation oder andere UI-Elemente an
+    }
+  });
+  
+  document.addEventListener('data:loaded', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unser Modul betreffen
+    if (customEvent.detail.source === 'LogsViewer') {
+      console.log('Logs: Daten erfolgreich geladen');
+    }
+  });
+  
+  document.addEventListener('data:error', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unser Modul betreffen
+    if (customEvent.detail.source === 'LogsViewer') {
+      console.error('Logs: Fehler beim Laden der Daten:', customEvent.detail.message);
+      // Fehler in der UI anzeigen
+    }
+  });
+
   // Logs vom Backend abrufen
   async function fetchLogs(): Promise<LogResponse> {
     try {
@@ -101,15 +198,29 @@ document.addEventListener("DOMContentLoaded", () => {
       displayLogs(data.logs);
       updateComponentFilter(data.components);
       updateLogCount(data.count);
+      
+      // Loaded-Event senden
+      dispatchLogsEvent('logs:loaded', {
+        message: `${data.count} Logs geladen`,
+        data
+      });
 
       return data;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
       console.error("Fehler beim Abrufen der Logs:", error);
       logEntriesContainer.innerHTML = `
         <div class="alert alert-danger">
-          <strong>Fehler beim Abrufen der Logs:</strong> ${(error as Error).message}
+          <strong>Fehler beim Abrufen der Logs:</strong> ${errorMessage}
         </div>
       `;
+      
+      // Error-Event senden
+      dispatchLogsEvent('logs:error', {
+        message: `Fehler beim Abrufen der Logs: ${errorMessage}`,
+        error
+      });
+      
       return { logs: [], count: 0, components: [] };
     }
   }
@@ -215,11 +326,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // Logs herunterladen
   async function downloadLogs(): Promise<void> {
     try {
-      // Alle Logs abrufen ohne Filter
-      const response = await fetch("/api/logs");
-      const data = await response.json() as LogResponse;
+      // Event senden
+      dispatchLogsEvent('logs:loading', {
+        message: 'Bereite Log-Download vor...'
+      });
+      
+      const response = await fetch("/api/logs/download");
+      if (!response.ok) {
+        throw new Error(`HTTP-Fehler: ${response.status}`);
+      }
 
-      if (data.logs.length === 0) {
+      const data = await response.json() as LogResponse;
+      if (!data.logs || data.logs.length === 0) {
         alert("Keine Logs zum Herunterladen vorhanden.");
         return;
       }
@@ -242,9 +360,23 @@ document.addEventListener("DOMContentLoaded", () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (error) {
+      
+      // Erfolgs-Event senden
+      dispatchLogsEvent('logs:loaded', {
+        message: 'Log-Download erfolgreich',
+        data
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
       console.error("Fehler beim Herunterladen der Logs:", error);
-      alert(`Fehler beim Herunterladen der Logs: ${(error as Error).message}`);
+      
+      // Error-Event senden
+      dispatchLogsEvent('logs:error', {
+        message: `Fehler beim Herunterladen der Logs: ${errorMessage}`,
+        error
+      });
+      
+      alert(`Fehler beim Herunterladen der Logs: ${errorMessage}`);
     }
   }
 
@@ -259,18 +391,38 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
+      // Event senden
+      dispatchLogsEvent('logs:loading', {
+        message: 'Lösche alle Logs...'
+      });
+      
       const response = await fetch("/api/logs", {
         method: "DELETE",
       });
 
       const data = await response.json() as { message: string };
+      
+      // Erfolgs-Event senden
+      dispatchLogsEvent('logs:cleared', {
+        message: data.message
+      });
+      
+      // Benutzer informieren
       alert(data.message);
 
       // Logs neu laden
       fetchLogs();
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
       console.error("Fehler beim Löschen der Logs:", error);
-      alert(`Fehler beim Löschen der Logs: ${(error as Error).message}`);
+      
+      // Error-Event senden
+      dispatchLogsEvent('logs:error', {
+        message: `Fehler beim Löschen der Logs: ${errorMessage}`,
+        error
+      });
+      
+      alert(`Fehler beim Löschen der Logs: ${errorMessage}`);
     }
   }
 
@@ -340,6 +492,12 @@ document.addEventListener("DOMContentLoaded", () => {
       currentFilters.levels.push("WARNING");
     }
     if (showError.checked) currentFilters.levels.push("ERROR");
+    
+    // Filter-Changed-Event senden
+    dispatchLogsEvent('logs:filter-changed', {
+      message: `Filter geändert: ${currentFilters.levels.join(', ')}`,
+      data: {...currentFilters}
+    });
   }
 
   // Tab-Wechsel überwachen, um Logs zu laden, wenn der Log-Tab aktiviert wird
@@ -365,8 +523,21 @@ document.addEventListener("DOMContentLoaded", () => {
     toggleAutoRefresh();
   }
 
+  /**
+   * Initialisiert das LogsViewer-Modul
+   */
+  function init(): Promise<void> {
+    return Promise.resolve().then(() => {
+      console.log('LogsViewer initialisiert');
+      fetchLogs();
+      toggleAutoRefresh();
+    });
+  }
+
   // Global verfügbar machen
   window.LogsViewer = {
+    init,
+    fetchLogs, // Als Alias für refreshLogs für API-Kompatibilität
     refreshLogs: fetchLogs,
     clearLogs,
     downloadLogs,

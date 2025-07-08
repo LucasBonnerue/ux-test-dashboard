@@ -283,10 +283,10 @@ function calculateSuccessRates(testRuns: TestRun[]): SuccessRatesReport {
     if (test.statusHistory.length > 5) {
       const recentPasses = test.statusHistory
         .slice(-5)
-        .filter((s) => s.status === "passed").length;
+        .filter((s: { status: string }) => s.status === "passed").length;
       const earlierPasses = test.statusHistory
         .slice(-10, -5)
-        .filter((s) => s.status === "passed").length;
+        .filter((s: { status: string }) => s.status === "passed").length;
 
       if (recentPasses > earlierPasses) trend = "improving";
       else if (recentPasses < earlierPasses) trend = "declining";
@@ -426,12 +426,12 @@ function calculateFlakinessScores(testRuns: TestRun[]): FlakinessReport {
     let durationVarianceFactor = 0;
     if (test.durations.length > 1) {
       const avgDuration =
-        test.durations.reduce((sum, d) => sum + d, 0) / test.durations.length;
+        test.durations.reduce((sum: number, d: number) => sum + d, 0) / test.durations.length;
       const variances = test.durations.map(
-        (d) => Math.abs(d - avgDuration) / avgDuration,
+        (d: number) => Math.abs(d - avgDuration) / avgDuration,
       );
       const avgVariance =
-        variances.reduce((sum, v) => sum + v, 0) / variances.length;
+        variances.reduce((sum: number, v: number) => sum + v, 0) / variances.length;
       durationVarianceFactor = Math.min(100, avgVariance * 100);
     }
 

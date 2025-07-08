@@ -159,3 +159,113 @@ function filterByProperty<T>(array: T[], property: keyof T, value: any): T[] {
   return array.filter(item => item[property] === value);
 }
 ```
+
+## Event-basierte Modulkommunikation
+
+Ein zentraler Aspekt unserer TypeScript-Migration ist die Einführung eines typisierten Event-Systems für die Modulkommunikation im Frontend. Dieses System ersetzt die frühere direkte Verwendung von globalen `window`-Objekten.
+
+### 1. Typisierte CustomEvents definieren
+
+```typescript
+// Event-Typen als String-Literale definieren
+type DashboardEventType = 'data:loading' | 'data:loaded' | 'data:error' | 'module:error';
+type ModuleEventType = 'success-rate:loading' | 'success-rate:loaded' | 'success-rate:error';
+
+// Event-Detail-Interfaces für typisierte Payloads
+interface DashboardEventDetail {
+  source: string;         // Quellmodul des Events
+  message?: string;      // Optionale Nachricht
+  data?: unknown;        // Optionale Daten
+  error?: Error | unknown; // Optionaler Fehler
+}
+
+interface ModuleEventDetail extends DashboardEventDetail {
+  // Modulspezifische Zusatzdaten
+  metricData?: MetricData;
+}
+```
+
+### 2. Event-Dispatching mit Typsicherheit
+
+```typescript
+// Typsichere Event-Dispatch-Funktion
+function dispatchModuleEvent(eventType: ModuleEventType, detail: Partial<ModuleEventDetail>): void {
+  // Modulspezifisches Event senden
+  const event = new CustomEvent(eventType, {
+    bubbles: true,
+    cancelable: true,
+    detail: { source: 'ModuleName', ...detail }
+  });
+  document.dispatchEvent(event);
+  
+  // Auf Dashboard-Event mappen
+  let dashboardEventType: DashboardEventType | undefined;
+  
+  // Event-Typ-Mapping für konsistentes Dashboard-Event-System
+  if (eventType.endsWith(':loading')) dashboardEventType = 'data:loading';
+  else if (eventType.endsWith(':loaded')) dashboardEventType = 'data:loaded';
+  else if (eventType.endsWith(':error')) dashboardEventType = 'data:error';
+  
+  // Dashboard-Event senden, wenn Mapping existiert
+  if (dashboardEventType) {
+    const dashboardEvent = new CustomEvent(dashboardEventType, {
+      bubbles: true,
+      cancelable: true,
+      detail: { source: 'ModuleName', ...detail }
+    });
+    document.dispatchEvent(dashboardEvent);
+  }
+}
+```
+
+### 3. Event-Listener mit TypeScript
+
+```typescript
+// Event-Listener mit korrekter Typisierung
+document.addEventListener('data:loading', (event: Event) => {
+  // Event in typisiertes CustomEvent umwandeln
+  const customEvent = event as CustomEvent<DashboardEventDetail>;
+  
+  // Auf Details mit Typsicherheit zugreifen
+  const { source, message } = customEvent.detail;
+  
+  // Logik basierend auf Event-Quelle
+  if (source === 'ModuleName') {
+    // Modul-spezifische Logik
+    showLoadingIndicator();
+  }
+});
+```
+
+### 4. Asynchrone Operationen mit Events
+
+```typescript
+// Asynchrone Funktion mit Event-basiertem Status
+async function loadData(): Promise<void> {
+  try {
+    // Lade-Event senden
+    dispatchModuleEvent('module:loading', { message: 'Daten werden geladen...' });
+    
+    // Daten asynchron laden
+    const response = await fetch('/api/data');
+    const data = await response.json();
+    
+    // Erfolgs-Event senden
+    dispatchModuleEvent('module:loaded', { data });
+  } catch (error) {
+    // Fehler-Event senden
+    dispatchModuleEvent('module:error', { 
+      error, 
+      message: 'Fehler beim Laden der Daten' 
+    });
+  }
+}
+```
+
+### 5. Best Practices für das Event-System
+
+1. **Einheitliche Namenskonvention**: `modulname:aktion` (z.B. `logs:loading`, `success-rate:error`)
+2. **Zentrales Event-Mapping**: Module-Events auf Dashboard-Events mappen
+3. **Typsicherheit**: Interfaces für alle Event-Details verwenden
+4. **Konsistente Struktur**: Source, Message, Data und Error in allen Events gleich strukturieren
+5. **Bubbling**: Events mit `bubbles: true` für App-weite Kommunikation nutzen

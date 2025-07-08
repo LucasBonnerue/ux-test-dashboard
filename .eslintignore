@@ -12,5 +12,8 @@ server-complete.js
 # Build-Skripte
 scripts/js-to-ts-rename.js
 
+# Test-Runner Datei (Node.js Script mit CommonJS-Syntax)
+test/run-tests.js
+
 # Explizit nicht ignorieren - diese TypeScript-Dateien sollen geprüft werden
 !public/js/metrics-ts/*.ts

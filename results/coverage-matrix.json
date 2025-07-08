@@ -1,0 +1,8 @@
+{
+  "areas": ["UI", "Funktional", "Integration"],
+  "coverage": {
+    "UI": 76,
+    "Funktional": 10,
+    "Integration": 0
+  }
+}

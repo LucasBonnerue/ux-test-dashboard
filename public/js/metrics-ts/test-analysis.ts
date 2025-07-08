@@ -4,18 +4,34 @@
  */
 
 // Typdefinitionen für die Test-Analyse
+
+/**
+ * Repräsentiert eine Assertion in einem Test
+ */
+interface Assertion {
+  type: string;
+  value: string;
+  operator?: string;
+  expected?: string | number | boolean | null;
+}
+/**
+ * Repräsentiert die Metadaten eines Tests in der Analyse
+ */
 interface TestMetadata {
   name: string;
   description?: string;
   testType?: string;
   functionalAreas?: string[];
   selectors?: TestSelector[];
-  assertions?: any[];
+  assertions?: Assertion[];
   coverage?: {
     area?: string[];
   };
 }
 
+/**
+ * Repräsentiert einen Selector, der in Tests verwendet wird
+ */
 interface TestSelector {
   type: 'testId' | 'role' | 'text' | 'css' | 'xpath';
   value: string;
@@ -74,6 +90,25 @@ declare global {
   }
 }
 
+/**
+ * Event-Typen für die Kommunikation mit anderen Modulen
+ */
+type TestAnalysisEventType =
+  | 'test-analysis:loading'
+  | 'test-analysis:loaded'
+  | 'test-analysis:error'
+  | 'test-analysis:filter-changed';
+
+/**
+ * Event-Details für Test-Analyse-Events
+ */
+interface TestAnalysisEventDetail {
+  source: string;
+  message?: string;
+  data?: unknown;
+  error?: Error | unknown;
+}
+
 // DOM-Elemente
 let analysisSpinner: HTMLElement | null;
 let analysisStatus: HTMLElement | null;
@@ -111,7 +146,11 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Diagramm-Initialisierung erfolgt global
   
-  // Lade gespeicherte Analyseergebnisse beim Start, falls vorhanden
+  /**
+   * Lädt die zuvor gespeicherten Analyse-Ergebnisse vom Backend oder aus dem LocalStorage.
+   * Aktualisiert die UI entsprechend und löst Events aus.
+   * @returns Promise<void>
+   */
   loadAnalysisResults();
   
   // Event-Handler für den Analyse-Button
@@ -120,6 +159,39 @@ document.addEventListener('DOMContentLoaded', function() {
       runTestAnalysis();
     });
   }
+  
+  // Dashboard-Events abonnieren
+  document.addEventListener('data:loading', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unseres Moduls betreffen
+    if (customEvent.detail.source === 'TestAnalysisView') {
+      console.log('Test-Analyse: Ladevorgang gestartet');
+      showAnalysisLoading(true);
+    }
+  });
+  
+  document.addEventListener('data:loaded', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unseres Moduls betreffen
+    if (customEvent.detail.source === 'TestAnalysisView') {
+      console.log('Test-Analyse: Daten erfolgreich geladen');
+      showAnalysisLoading(false);
+      updateAnalysisStatus('success', 'Analyse-Ergebnisse erfolgreich geladen');
+    }
+  });
+  
+  document.addEventListener('data:error', (event: Event) => {
+    const customEvent = event as CustomEvent<{source: string; message?: string}>;
+    
+    // Nur auf Events reagieren, die unseres Moduls betreffen
+    if (customEvent.detail.source === 'TestAnalysisView') {
+      console.error('Test-Analyse: Fehler beim Laden der Daten');
+      showAnalysisLoading(false);
+      updateAnalysisStatus('danger', customEvent.detail.message || 'Fehler beim Laden der Analyse-Ergebnisse');
+    }
+  });
   
   // Filter-Buttons für die Test-Typen
   if (filterTypeButtons) {
@@ -154,77 +226,74 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
- * Test-Analyse ausführen
+ * Führt eine Test-Analyse durch, indem die Backend-API aufgerufen wird.
+ * Aktualisiert die UI mit den Ergebnissen und löst entsprechende Events aus.
+ * @returns Promise<void>
  */
 async function runTestAnalysis(): Promise<void> {
-  if (!analysisSpinner || !analysisStatus) return;
-
-  showAnalysisLoading(true);
-  updateAnalysisStatus('info', 'Führe Test-Analyse durch...');
-
   try {
-    // API-Aufruf zur Test-Analyse
-    const response = await fetch('/api/test-analysis', {
+    // Status anzeigen und Loading-Event senden
+    dispatchTestAnalysisEvent('test-analysis:loading', {
+      message: 'Test-Analyse wird durchgeführt...'
+    });
+    
+    showAnalysisLoading(true);
+    updateAnalysisStatus('info', 'Test-Analyse wird durchgeführt...');
+    
+    // API-Aufruf zum Starten der Analyse
+    const response = await fetch('/api/test-analysis/run', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({}) // Leeres Objekt, kann später mit Optionen erweitert werden
+      }
     });
     
+    // Fehlerbehandlung
     if (!response.ok) {
-      throw new Error(`HTTP-Fehler: ${response.status}`);
+      throw new Error(`Fehler bei der Analyse: ${response.statusText}`);
     }
     
-    const data: AnalysisData = await response.json();
-    console.log('Analyse-Daten erhalten:', data);
+    // JSON-Daten extrahieren
+    const result = await response.json();
     
-    try {
-      // Testmetadaten anzeigen
-      if (data.testMetadata) {
-        displayTestMetadata(data.testMetadata);
-      }
-      
-      // Abdeckungsmatrix anzeigen
-      if (data.coverageMatrix) {
-        displayCoverageMatrix(data.coverageMatrix);
-      }
-      
-      // Qualitätsmetriken anzeigen
-      displayQualityMetrics(data);
-      
-      // Diagramme initialisieren
-      initCharts(data);
-      
-      // Erfolgs-Nachricht mit Details
-      const testCount = data.testMetadata?.length || 0;
-      updateAnalysisStatus('success', `Analyse erfolgreich abgeschlossen. ${testCount} Tests analysiert.`);
-      
-      // Ergebnisse lokal speichern für schnelleren Zugriff
-      localStorage.setItem('testAnalysisResults', JSON.stringify(data));
-      
-      // Erfolgs-Event auslösen
-      const successEvent = new CustomEvent('analysis-success', {
-        detail: { data }
-      });
-      document.dispatchEvent(successEvent);
-    } catch (displayError: any) {
-      console.error('Fehler beim Anzeigen der Daten:', displayError);
-      updateAnalysisStatus('warning', `Fehler bei der Datenanzeige: ${displayError.message}`);
-      
-      // Fehler-Event auslösen
-      const errorEvent = new CustomEvent('analysis-error', {
-        detail: { message: displayError.message }
-      });
-      document.dispatchEvent(errorEvent);
-    }
-  } catch (error: any) {
-    console.error('Fehler bei der Test-Analyse:', error);
-    updateAnalysisStatus('danger', `Fehler bei der Analyse: ${error.message}`);
+    // Erfolg anzeigen
+    updateAnalysisStatus('success', 'Analyse erfolgreich durchgeführt!');
     
-    // Fehler-Event auslösen
-    const errorEvent = new CustomEvent('analysis-error', {
-      detail: { message: error.message }
+    // Ergebnisse laden
+    await loadAnalysisResults();
+    
+    // Erfolg-Event senden im neuen Format
+    dispatchTestAnalysisEvent('test-analysis:loaded', {
+      message: 'Analyse erfolgreich durchgeführt!',
+      data: result
+    });
+    
+    // Auch standardisiertes Dashboard-Event senden
+    const loadedEvent = new CustomEvent('data:loaded', {
+      bubbles: true,
+      detail: { source: 'TestAnalysisView', message: 'Analyse erfolgreich durchgeführt!' }
+    });
+    document.dispatchEvent(loadedEvent);
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+    console.error('Fehler bei der Testanalyse:', errorMessage);
+    showAnalysisLoading(false);
+    updateAnalysisStatus('danger', `Fehler bei der Analyse: ${errorMessage}`);
+    
+    // Error-Event senden
+    dispatchTestAnalysisEvent('test-analysis:error', {
+      message: errorMessage,
+      error
+    });
+    
+    // Auch standardisiertes Dashboard-Event senden
+    const errorEvent = new CustomEvent('data:error', {
+      bubbles: true,
+      detail: { 
+        source: 'TestAnalysisView', 
+        message: errorMessage 
+      }
     });
     document.dispatchEvent(errorEvent);
   } finally {
@@ -234,39 +303,86 @@ async function runTestAnalysis(): Promise<void> {
 }
 
 /**
- * Gespeicherte Analyseergebnisse laden
+ * Lädt gespeicherte Test-Analyseergebnisse vom Server.
+ * Zeigt die Ergebnisse in der UI an und löst entsprechende Events aus.
+ * @returns Promise<void>
  */
 async function loadAnalysisResults(): Promise<void> {
   try {
+    // Lade-Status anzeigen und Event senden
+    dispatchTestAnalysisEvent('test-analysis:loading', {
+      message: 'Lade gespeicherte Analyseergebnisse...'
+    });
+    
+    showAnalysisLoading(true);
+    
+    // Ergebnisse vom Server laden
     const response = await fetch('/api/test-analysis/results');
     
+    // Fehlerbehandlung
     if (!response.ok) {
-      throw new Error('Keine gespeicherten Ergebnisse verfügbar');
+      throw new Error(`Fehler beim Laden der Ergebnisse: ${response.statusText}`);
     }
     
-    const data: AnalysisData = await response.json();
+    // JSON-Daten extrahieren
+    const data = await response.json();
     
-    if (data && data.testMetadata && data.testMetadata.length > 0) {
-      updateAnalysisStatus('info', 'Letzte Analyseergebnisse geladen');
-      displayTestMetadata(data.testMetadata || []);
-      displayCoverageMatrix(data.coverageMatrix || {});
-      displayQualityMetrics(data);
-      initCharts(data);
-      
-      // Erfolgs-Event auslösen
-      const successEvent = new CustomEvent('analysis-success', {
-        detail: { data }
-      });
-      document.dispatchEvent(successEvent);
+    // Wenn keine Daten vorhanden sind oder ein Fehler vorliegt
+    if (!data.success || !data.data) {
+      throw new Error(data.message || 'Keine Analysedaten verfügbar');
     }
-  } catch (error: any) {
-    console.log('Keine gespeicherten Analyseergebnisse:', error.message);
-    // Kein Error-Status nötig, da es normal ist, keine Ergebnisse zu haben
-    // Trotzdem ein Event auslösen für Debugging-Zwecke
-    const infoEvent = new CustomEvent('analysis-info', {
-      detail: { message: 'Keine gespeicherten Analyseergebnisse vorhanden.' }
+    
+    // Daten aus der API anzeigen
+    if (data.data.testMetadata) {
+      displayTestMetadata(data.data.testMetadata);
+    }
+    
+    // Matrix anzeigen, falls vorhanden
+    if (data.data.coverageMatrix) {
+      displayCoverageMatrix(data.data.coverageMatrix);
+    }
+    
+    // Qualitätsmetriken anzeigen, falls vorhanden
+    if (data.data.qualityMetrics) {
+      displayQualityMetrics(data.data.qualityMetrics);
+    }
+    
+    showAnalysisLoading(false);
+    
+    // Erfolgreiches Laden signalisieren
+    dispatchTestAnalysisEvent('test-analysis:loaded', {
+      message: 'Analyseergebnisse erfolgreich geladen',
+      data: data.data
     });
-    document.dispatchEvent(infoEvent);
+    
+    // Auch standardisiertes Dashboard-Event senden
+    const loadedEvent = new CustomEvent('data:loaded', {
+      bubbles: true,
+      detail: { source: 'TestAnalysisView', message: 'Analyseergebnisse erfolgreich geladen' }
+    });
+    document.dispatchEvent(loadedEvent);
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+    console.error('Fehler beim Laden der Analyseergebnisse:', errorMessage);
+    showAnalysisLoading(false);
+    updateAnalysisStatus('danger', `Fehler beim Laden der Ergebnisse: ${errorMessage}`);
+    
+    // Error-Event senden
+    dispatchTestAnalysisEvent('test-analysis:error', {
+      message: errorMessage,
+      error
+    });
+    
+    // Auch standardisiertes Dashboard-Event senden
+    const errorEvent = new CustomEvent('data:error', {
+      bubbles: true,
+      detail: { 
+        source: 'TestAnalysisView', 
+        message: errorMessage 
+      }
+    });
+    document.dispatchEvent(errorEvent);
   }
 }
 
@@ -858,6 +974,32 @@ function formatStatus(status: string): string {
 }
 
 // Global verfügbar machen
+/**
+ * Sendet ein Test-Analyse-Event
+ */
+function dispatchTestAnalysisEvent(eventType: TestAnalysisEventType, detail: Partial<TestAnalysisEventDetail>): void {
+  // Standardwerte hinzufügen
+  const fullDetail = {
+    source: 'TestAnalysisView',
+    ...detail
+  };
+  
+  // Event erstellen und senden
+  const event = new CustomEvent(eventType, {
+    bubbles: true,
+    cancelable: true,
+    detail: fullDetail
+  });
+  
+  document.dispatchEvent(event);
+  console.debug(`Event "${eventType}" gesendet von TestAnalysisView:`, fullDetail);
+}
+
+/**
+ * Globales TestAnalysisView-Objekt für externe Verwendung
+ * Ermöglicht Initialisierung und Steuerung der Test-Analyse-Ansicht
+ * und kommuniziert über das Dashboard-Event-System
+ */
 window.TestAnalysisView = {
   init: function() {
     loadAnalysisResults();

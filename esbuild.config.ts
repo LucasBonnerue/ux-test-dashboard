@@ -22,6 +22,9 @@ if (!fs.existsSync(DIST_DIR)) {
 
 // Entrypoints für Frontend-Dateien finden - nur bereits migrierte TS-Dateien
 const ENTRY_POINTS = [
+  // Haupt-Dashboard-Controller (zentraler Einstiegspunkt)
+  path.join(__dirname, 'public/js/metrics-ts/dashboard-init.ts'),
+  // Modul-spezifische Entry Points
   path.join(__dirname, 'public/js/metrics-ts/success-rate-view.ts'),
   path.join(__dirname, 'public/js/metrics-ts/flakiness-view.ts'),
   path.join(__dirname, 'public/js/metrics-ts/logs.ts'),

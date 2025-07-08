@@ -47,6 +47,23 @@ module.exports = {
         "@typescript-eslint/no-var-requires": "off",
       },
     },
+    // Test runner specific
+    {
+      files: ["test/run-tests.js"],
+      env: {
+        node: true,
+        mocha: true
+      },
+      globals: {
+        process: true,
+        __dirname: true,
+        require: true
+      },
+      rules: {
+        "@typescript-eslint/no-var-requires": "off",
+        "no-undef": "off"
+      }
+    },
     // TypeScript Dateien
     {
       files: ["*.ts"],

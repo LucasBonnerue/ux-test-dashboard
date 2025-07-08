@@ -297,8 +297,9 @@ async function sendTestRun(testRun: TestRun): Promise<boolean> {
       `Testlauf ${testRun.runName} erfolgreich gesendet: ${result.runId || "ID unbekannt"}`,
     );
     return true;
-  } catch (error) {
-    log(`API-Fehler: ${error.message}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+    log(`API-Fehler: ${errorMessage}`);
     return false;
   }
 }

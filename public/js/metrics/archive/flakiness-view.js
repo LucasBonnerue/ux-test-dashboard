@@ -1,44 +1,23 @@
 /**
  * Flakiness Visualization
  * 
- * TypeScript für die Visualisierung der Flakiness (Instabilität) von Tests.
+ * JavaScript für die Visualisierung der Flakiness (Instabilität) von Tests.
  * Enthält Funktionen zum Laden und Darstellen von Flakiness-Daten.
- * Verwendet das Event-basierte Kommunikationssystem für eine bessere Modularisierung.
  */
 
 // Status für Daten und UI-Elemente
-let flakinessReport: FlakinessReport | null = null;
-let flakyTestsList: FlakinessMeasure[] | null = null;
+let flakinessReport = null;
+let flakyTestsList = null;
 let currentDays = 14;
 
 // DOM-Elemente (werden initialisiert, wenn das Dokument geladen ist)
-let flakinessContainer: HTMLElement | null;
-let flakyTestsContainer: HTMLElement | null;
-let flakinessChartElement: HTMLElement | null;
-let flakinessLoadingIndicator: HTMLElement | null;
-let flakinessErrorMessage: HTMLElement | null;
-let daysSelector: HTMLSelectElement | null;
-let flakinessChart: Chart | null = null;
-
-/**
- * Event-Typen für die Flakiness-Komponente
- */
-type FlakinessEventType = 
-  | 'flakiness:loading'
-  | 'flakiness:loaded'
-  | 'flakiness:error'
-  | 'flakiness:days-changed';
-
-/**
- * Event-Details für Flakiness-Events
- */
-interface FlakinessEventDetail {
-  source: string;
-  message?: string;
-  data?: FlakinessReport | FlakinessMeasure[] | unknown;
-  error?: Error | unknown;
-  days?: number;
-}
+let flakinessContainer;
+let flakyTestsContainer;
+let flakinessChartElement;
+let flakinessLoadingIndicator;
+let flakinessErrorMessage;
+let daysSelector;
+let flakinessChart = null;
 
 /**
  * Initialisierung beim Laden der Seite
@@ -50,120 +29,28 @@ document.addEventListener('DOMContentLoaded', () => {
   flakinessChartElement = document.getElementById('flakiness-chart');
   flakinessLoadingIndicator = document.getElementById('flakiness-loading');
   flakinessErrorMessage = document.getElementById('flakiness-error');
-  daysSelector = document.getElementById('flakiness-days-select') as HTMLSelectElement;
+  daysSelector = document.getElementById('flakiness-days-select');
   
   // Event-Listener für Tageauswahl
   if (daysSelector) {
     daysSelector.addEventListener('change', handleDaysChange);
   }
   
-  // Dashboard-Events registrieren
-  setupEventListeners();
-  
   // Erste Daten laden
   loadFlakinessReport();
 });
 
 /**
- * Richtet die Event-Listener für Dashboard-weite Events ein
- */
-function setupEventListeners(): void {
-  document.addEventListener('data:loading', (event: Event) => {
-    const customEvent = event as CustomEvent<{source: string; message?: string}>;
-    
-    // Nur auf Events reagieren, die dieses Modul betreffen
-    if (customEvent.detail.source === 'FlakinessView') {
-      console.log('Flakiness: Ladevorgang gestartet');
-      showLoading(true);
-    }
-  });
-  
-  document.addEventListener('data:loaded', (event: Event) => {
-    const customEvent = event as CustomEvent<{source: string; message?: string}>;
-    
-    // Nur auf Events reagieren, die dieses Modul betreffen
-    if (customEvent.detail.source === 'FlakinessView') {
-      console.log('Flakiness: Daten erfolgreich geladen');
-      showLoading(false);
-    }
-  });
-  
-  document.addEventListener('data:error', (event: Event) => {
-    const customEvent = event as CustomEvent<{source: string; message?: string}>;
-    
-    // Nur auf Events reagieren, die dieses Modul betreffen
-    if (customEvent.detail.source === 'FlakinessView') {
-      console.error('Flakiness: Fehler beim Laden der Daten:', customEvent.detail.message);
-      showError(true, customEvent.detail.message || 'Unbekannter Fehler');
-    }
-  });
-}
-
-/**
- * Sendet ein Flakiness-Event
- */
-function dispatchFlakinessEvent(eventType: FlakinessEventType, detail: Partial<FlakinessEventDetail>): void {
-  // Standardwerte hinzufügen
-  const fullDetail = {
-    source: 'FlakinessView',
-    ...detail
-  };
-  
-  // Event erstellen und senden
-  const event = new CustomEvent(eventType, {
-    bubbles: true,
-    cancelable: true,
-    detail: fullDetail
-  });
-  
-  // Spezifisches Event senden
-  document.dispatchEvent(event);
-  
-  // Auch standardisiertes Dashboard-Event senden
-  let dashboardEventType: string;
-  
-  switch(eventType) {
-    case 'flakiness:loading':
-      dashboardEventType = 'data:loading';
-      break;
-    case 'flakiness:loaded':
-      dashboardEventType = 'data:loaded';
-      break;
-    case 'flakiness:error':
-      dashboardEventType = 'data:error';
-      break;
-    default:
-      // Kein standardisiertes Event für andere Typen
-      return;
-  }
-  
-  const dashboardEvent = new CustomEvent(dashboardEventType, {
-    bubbles: true,
-    cancelable: true,
-    detail: fullDetail
-  });
-  
-  document.dispatchEvent(dashboardEvent);
-  console.debug(`Event "${eventType}" gesendet von FlakinessView:`, fullDetail);
-}
-
-/**
  * Lädt den Flakiness-Bericht vom Server
  */
-async function loadFlakinessReport(): Promise<void> {
+async function loadFlakinessReport() {
   showLoading(true);
   showError(false);
   
-  // Loading-Event senden
-  dispatchFlakinessEvent('flakiness:loading', {
-    message: 'Lade Flakiness-Bericht...',
-    days: currentDays
-  });
-  
   try {
     // Schwellenwert aus dem UI oder Default verwenden
-    const thresholdElement = document.getElementById('flakiness-threshold') as HTMLInputElement | null;
-    const threshold = thresholdElement ? Number(thresholdElement.value) : 20;
+    const threshold = document.getElementById('flakiness-threshold') ? 
+      document.getElementById('flakiness-threshold').value : 20;
     
     const url = `/api/test-metrics/flakiness?days=${currentDays}&threshold=${threshold}`;
     const response = await fetch(url);
@@ -172,7 +59,7 @@ async function loadFlakinessReport(): Promise<void> {
       throw new Error(`Serverfehler: ${response.status}`);
     }
     
-    const data = await response.json() as FlakinessReport;
+    const data = await response.json();
     
     // Daten speichern und anzeigen
     flakinessReport = data;
@@ -180,23 +67,9 @@ async function loadFlakinessReport(): Promise<void> {
     
     // Flaky Tests direkt aus dem Report verwenden
     displayFlakyTests(data.flakinessMeasures);
-    
-    // Erfolg-Event senden
-    dispatchFlakinessEvent('flakiness:loaded', {
-      message: `Flakiness-Bericht mit ${data.flakinessMeasures?.length || 0} Tests geladen`,
-      data
-    });
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 
-      (typeof error === 'string' ? error : JSON.stringify(error));
+  } catch (error) {
     console.error('Fehler beim Laden des Flakiness-Berichts:', error);
-    showError(true, `Fehler beim Laden des Flakiness-Berichts: ${errorMessage}`);
-    
-    // Fehler-Event senden
-    dispatchFlakinessEvent('flakiness:error', {
-      message: `Fehler beim Laden des Flakiness-Berichts: ${errorMessage}`,
-      error
-    });
+    showError(true, `Fehler beim Laden des Flakiness-Berichts: ${error.message || JSON.stringify(error)}`);
   } finally {
     showLoading(false);
   }
@@ -205,16 +78,11 @@ async function loadFlakinessReport(): Promise<void> {
 /**
  * Lädt die instabilsten Tests vom Server
  */
-async function loadFlakyTests(): Promise<void> {
-  // Loading-Event senden, aber UI nicht blockieren
-  dispatchFlakinessEvent('flakiness:loading', {
-    message: 'Lade instabile Tests...'
-  });
-  
+async function loadFlakyTests() {
   try {
     const url = '/api/test-metrics/flaky-tests?limit=10';
     const response = await fetch(url);
-    const data = await response.json() as FlakyTestsResponse;
+    const data = await response.json();
     
     if (!data.success) {
       throw new Error(data.error || 'Fehler beim Laden der instabilen Tests');
@@ -223,30 +91,17 @@ async function loadFlakyTests(): Promise<void> {
     // Daten speichern und anzeigen
     flakyTestsList = data.flakyTests;
     displayFlakyTests(flakyTestsList);
-    
-    // Erfolg-Event senden
-    dispatchFlakinessEvent('flakiness:loaded', {
-      message: 'Instabile Tests erfolgreich geladen',
-      data: flakyTestsList
-    });
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+  } catch (error) {
     console.error('Fehler beim Laden der instabilen Tests:', error);
-    
-    // Fehler-Event senden, aber UI nicht überladen
-    dispatchFlakinessEvent('flakiness:error', {
-      message: `Fehler beim Laden der instabilen Tests: ${errorMessage}`,
-      error
-    });
     // Hier nur in Konsole loggen, um UI nicht zu überladen
   }
 }
 
 /**
  * Zeigt den Flakiness-Bericht an
- * @param {FlakinessReport} report Der anzuzeigende Flakiness-Bericht
+ * @param {Object} report Der anzuzeigende Flakiness-Bericht
  */
-function displayFlakinessReport(report: FlakinessReport): void {
+function displayFlakinessReport(report) {
   if (!flakinessContainer || !report) return;
   
   // Container leeren
@@ -302,9 +157,9 @@ function displayFlakinessReport(report: FlakinessReport): void {
 
 /**
  * Zeigt die Liste der instabilsten Tests an
- * @param {FlakinessMeasure[]} tests Liste der instabilsten Tests
+ * @param {Array} tests Liste der instabilsten Tests
  */
-function displayFlakyTests(tests: FlakinessMeasure[]): void {
+function displayFlakyTests(tests) {
   if (!flakyTestsContainer) return;
   
   // Container leeren
@@ -332,8 +187,6 @@ function displayFlakyTests(tests: FlakinessMeasure[]): void {
   
   flakyTestsContainer.appendChild(flakyTestsCard);
   const cardBody = document.getElementById('flaky-tests-card-body');
-  
-  if (!cardBody) return;
   
   // Instabile Tests anzeigen
   tests.forEach((test, index) => {
@@ -382,9 +235,9 @@ function displayFlakyTests(tests: FlakinessMeasure[]): void {
 
 /**
  * Erstellt ein Chart für die Flakiness-Analyse
- * @param {FlakinessReport} report Der Flakiness-Bericht mit den Daten für das Chart
+ * @param {Object} report Der Flakiness-Bericht mit den Daten für das Chart
  */
-function createFlakinessChart(report: FlakinessReport): void {
+function createFlakinessChart(report) {
   if (!flakinessChartElement) {
     console.warn('Flakiness-Chart-Element nicht gefunden');
     return;
@@ -404,10 +257,8 @@ function createFlakinessChart(report: FlakinessReport): void {
     </div>
   `;
   
-  flakinessContainer?.appendChild(chartContainer);
-  const canvas = document.getElementById('flakiness-chart-canvas') as HTMLCanvasElement;
-  
-  if (!canvas) return;
+  flakinessContainer.appendChild(chartContainer);
+  const canvas = document.getElementById('flakiness-chart-canvas');
   
   // Daten für das Chart aufbereiten
   const labels = report.flakinessMeasures.map(item => item.testName);
@@ -437,41 +288,35 @@ function createFlakinessChart(report: FlakinessReport): void {
           borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
           borderWidth: 1
         }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          y: {
-            ticks: {
-              beginAtZero: true,
-              precision: 0
-            }
-          }
-        },
-        plugins: {
-          legend: {
-            display: false
-          },
-          title: {
-            display: true,
-            text: 'Verteilung der Instabilitätswerte',
-            font: {
-              size: 16
-            }
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0
           }
         }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        title: {
+          display: true,
+          text: 'Verteilung der Instabilitätswerte'
+        }
       }
-    });
-  }
+    }
+  });
 }
 
 /**
  * Berechnet die Verteilung der Flakiness-Werte
- * @param {FlakinessMeasure[]} measures Die zu analysierenden Flakiness-Maße
- * @returns {number[]} Ein Array mit der Verteilung der Flakiness-Werte
  */
-function calculateFlakinessDistribution(measures: FlakinessMeasure[]): number[] {
-  const distribution: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+function calculateFlakinessDistribution(measures) {
+  const distribution = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   
   for (const measure of measures) {
     const index = Math.min(9, Math.floor(measure.flakinessScore / 10));
@@ -483,27 +328,16 @@ function calculateFlakinessDistribution(measures: FlakinessMeasure[]): number[] 
 
 /**
  * Behandelt die Änderung der Tageanzahl
- * @param {Event} event Das Change-Event des Selektors
  */
-function handleDaysChange(event: Event): void {
-  if (event.target instanceof HTMLSelectElement) {
-    currentDays = parseInt(event.target.value);
-    
-    // Event für Tageänderung auslösen
-    dispatchFlakinessEvent('flakiness:days-changed', {
-      message: `Zeitraum geändert: ${currentDays} Tage`,
-      days: currentDays
-    });
-    
-    loadFlakinessReport();
-  }
+function handleDaysChange(event) {
+  currentDays = parseInt(event.target.value);
+  loadFlakinessReport();
 }
 
 /**
  * Zeigt oder versteckt den Ladeindikator
- * @param {boolean} show True zum Anzeigen, False zum Verstecken
  */
-function showLoading(show: boolean): void {
+function showLoading(show) {
   if (flakinessLoadingIndicator) {
     flakinessLoadingIndicator.style.display = show ? 'block' : 'none';
   }
@@ -511,10 +345,8 @@ function showLoading(show: boolean): void {
 
 /**
  * Zeigt oder versteckt die Fehlermeldung
- * @param {boolean} show True zum Anzeigen, False zum Verstecken
- * @param {string} message Die anzuzeigende Fehlermeldung
  */
-function showError(show: boolean, message = ''): void {
+function showError(show, message = '') {
   if (flakinessErrorMessage) {
     flakinessErrorMessage.style.display = show ? 'block' : 'none';
     if (show) {
@@ -525,10 +357,8 @@ function showError(show: boolean, message = ''): void {
 
 /**
  * Bestimmt die CSS-Klasse für eine Tabellenzeile basierend auf dem Flakiness-Score
- * @param {number} score Der Flakiness-Score
- * @returns {string} Die CSS-Klasse
  */
-function getFlakinessRowClass(score: number): string {
+function getFlakinessRowClass(score) {
   if (score >= 70) return 'high-flakiness';
   if (score >= 30) return 'medium-flakiness';
   return 'low-flakiness';
@@ -536,10 +366,8 @@ function getFlakinessRowClass(score: number): string {
 
 /**
  * Gibt eine Farbe basierend auf dem Flakiness-Score zurück
- * @param {number} score Der Flakiness-Score
- * @returns {string} Der Farbcode
  */
-function getFlakinessColor(score: number): string {
+function getFlakinessColor(score) {
   if (score >= 70) return '#F44336';  // Rot für hohe Flakiness
   if (score >= 30) return '#FFC107';  // Gelb für mittlere Flakiness
   return '#4CAF50';  // Grün für niedrige Flakiness
@@ -549,26 +377,8 @@ function getFlakinessColor(score: number): string {
 window.FlakinessView = {
   loadFlakinessReport,
   loadFlakyTests,
-  setDays: (days: number): void => {
+  setDays: (days) => {
     currentDays = days;
-    
-    // Event für Tageänderung auslösen
-    dispatchFlakinessEvent('flakiness:days-changed', {
-      message: `Zeitraum manuell gesetzt: ${days} Tage`,
-      days
-    });
-    
     loadFlakinessReport();
   }
 };
-
-// Erweitere die Window-Schnittstelle, um den FlakinessView hinzuzufügen
-declare global {
-  interface Window {
-    FlakinessView: {
-      loadFlakinessReport: () => Promise<void>;
-      loadFlakyTests: () => Promise<void>;
-      setDays: (days: number) => void;
-    };
-  }
-}

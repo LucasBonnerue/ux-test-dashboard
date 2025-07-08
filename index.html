@@ -4560,69 +4560,11 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Charts & Metriken -->    
-  <script src="/js/metrics/success-rate-view.js"></script>
-  <script src="/js/metrics/flakiness-view.js"></script>
-
-  <!-- Dashboard Initialisierung -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Initialisiere Testmetriken-Visualisierungen...');
-      // Die Module success-rate-view.js und flakiness-view.js 
-      // kümmern sich selbst um ihre Initialisierung
-      
-      // Globale Chart-Variable für Abwärtskompatibilität
-      if (window.Chart && !window.Chart) {
-        window.Chart = Chart;
-      }
-    });
-    
-    /**
-     * Initialisiert die Testmetriken-Visualisierungen
-     */
-    function initTestMetricsVisualizations() {
-      // Prüfen, ob die Module geladen wurden
-      if (typeof window.SuccessRateView === 'undefined' || typeof window.FlakinessView === 'undefined') {
-        console.error('Testmetriken-Module nicht geladen!');
-        document.getElementById('test-metrics-error').classList.remove('d-none');
-      }
-      
-      // Status anzeigen
-      document.getElementById('test-metrics-loading').classList.remove('d-none');
-      
-      // Erfolgsraten-Visualisierung initialisieren
-      window.SuccessRateView.init({
-        container: 'success-rate-container',
-        chartContainer: 'success-trend-chart',
-        filterContainer: 'success-rate-filters',
-        apiEndpoint: '/api/test-metrics/success-rates',
-        onLoad: function() {
-          document.getElementById('test-metrics-loading').classList.add('d-none');
-        },
-        onError: function(error) {
-          console.error('Fehler beim Laden der Erfolgsraten:', error);
-          document.getElementById('test-metrics-loading').classList.add('d-none');
-          document.getElementById('test-metrics-error').classList.remove('d-none');
-        }
-      });
-      
-      // Flakiness-Visualisierung initialisieren
-      window.FlakinessView.init({
-        container: 'flakiness-container',
-        chartContainer: 'flakiness-chart',
-        flakyTestsContainer: 'flaky-tests-container',
-        filterContainer: 'flakiness-filters',
-        apiEndpoint: '/api/test-metrics/flakiness',
-        onLoad: function() {
-          document.getElementById('test-metrics-loading').classList.add('d-none');
-        },
-        onError: function(error) {
-          console.error('Fehler beim Laden der Flakiness-Daten:', error);
-          document.getElementById('test-metrics-loading').classList.add('d-none');
-          document.getElementById('test-metrics-error').classList.remove('d-none');
-        }
-      });
-    }
-  </script>
+  <!-- Migrierte TypeScript-Module (kompiliert) -->
+  <script src="/js/dist/success-rate-view.js"></script>
+  <script src="/js/dist/flakiness-view.js"></script>
+  <script src="/js/dist/logs.js"></script>
+  <script src="/js/dist/test-analysis.js"></script>
+  <script src="/js/dist/dashboard-init.js"></script>
 </body>
 </html>

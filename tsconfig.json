@@ -17,7 +17,8 @@
     "forceConsistentCasingInFileNames": true, // Konsistente Dateinamen erzwingen
     "resolveJsonModule": true, // JSON-Module importieren erlauben
     "skipLibCheck": true, // Bibliothek-Prüfungen überspringen für schnellere Builds
-    "noImplicitAny": false // Zunächst implizite any-Typen erlauben für einfachere Migration
+    "noImplicitAny": true, // Implizite any-Typen verbieten für bessere Typsicherheit
+    "strictNullChecks": true // Strenge Null-Prüfungen aktivieren
   },
   "include": [
     "utils/**/*.ts",
@@ -34,6 +35,8 @@
     "node_modules",
     "dist", // Ausgabeverzeichnis ausschließen
     "**/*.test.ts", // Tests separat behandeln
-    "jest.config.ts" // Jest-Konfiguration ausschließen
+    "jest.config.ts", // Jest-Konfiguration ausschließen
+    "public/js/metrics/archive/**", // Archivierte Dateien ausschließen
+    "public/js/vendor/**" // Vendor-Dateien ausschließen
   ]
 }

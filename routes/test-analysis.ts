@@ -143,37 +143,60 @@ router.post("/test-analysis", function (req: any, res: any) {
 
 /**
  * GET /api/test-analysis/results
- * Gibt die gespeicherten Analyseergebnisse zurück ohne neue Analyse auszuführen
+ * 
+ * Gibt die gespeicherten Analyseergebnisse zurück ohne neue Analyse auszuführen.
+ * Beinhaltet Qualitätsmetriken für die UI-Anzeige.
  */
 router.get(
   "/test-analysis/results",
   (req: TypedRequest, res: TypedResponse) => {
+    console.log("GET /api/test-analysis/results aufgerufen");
+    
     try {
       const resultsDir = ensureResultsDir();
       const resultsPath = path.join(resultsDir, "test-analysis.json");
       const matrixPath = path.join(resultsDir, "coverage-matrix.json");
 
+      // Prüfen, ob Ergebnisse verfügbar sind
       if (!fs.existsSync(resultsPath)) {
+        console.log("Keine gespeicherten Analyseergebnisse gefunden.");
         return res.status(404).json({
           success: false,
-          error:
-            "Keine Analyseergebnisse gefunden. Bitte führen Sie zuerst eine Analyse durch.",
+          error: "Keine Analyseergebnisse gefunden. Bitte führen Sie zuerst eine Analyse durch.",
         });
       }
 
-      const results = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
-      let matrix = {};
+      // Lade gespeicherte Ergebnisse
+      const testResults = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
+      let coverageMatrix = {};
 
+      // Matrix laden, wenn vorhanden
       if (fs.existsSync(matrixPath)) {
-        matrix = JSON.parse(fs.readFileSync(matrixPath, "utf-8"));
+        coverageMatrix = JSON.parse(fs.readFileSync(matrixPath, "utf-8"));
       }
+      
+      // Berechne Qualitätsmetriken
+      const qualityMetrics = {
+        complexityScore: calculateQualityMetrics(testResults),
+        selectorTypes: analyzeSelectorTypes(testResults),
+        assertionCoverage: analyzeAssertionCoverage(testResults),
+      };
 
-      return res.status(200).json({
+      // Kombiniere die Ergebnisse in einer strukturierten Antwort
+      const responseData = {
         success: true,
-        testsAnalyzed: Array.isArray(results) ? results.length : 0,
-        results,
-        coverageMatrix: matrix,
-      });
+        testsAnalyzed: Array.isArray(testResults) ? testResults.length : 0,
+        testMetadata: testResults,      // Für die Frontend-Anzeige
+        results: testResults,          // Für Abwärtskompatibilität
+        coverageMatrix: coverageMatrix,
+        qualityMetrics: qualityMetrics
+      };
+
+      console.log(
+        `Gespeicherte Analyseergebnisse geladen: ${testResults.length} Tests`,
+      );
+      
+      return res.status(200).json(responseData);
     } catch (error) {
       console.error("Fehler beim Abrufen der Analyseergebnisse:", error);
       return res.status(500).json({
@@ -183,61 +206,6 @@ router.get(
     }
   },
 );
-
-/**
- * GET /api/test-analysis/results
- *
- * Lädt zuvor gespeicherte Analyseergebnisse aus der Datei
- */
-router.get("/test-analysis/results", function (req: any, res: any) {
-  console.log("GET /api/test-analysis/results aufgerufen");
-
-  try {
-    // Prüfe, ob die Ergebnisdatei existiert
-    const resultsPath = path.join(
-      __dirname,
-      "..",
-      "results",
-      "test-analysis.json",
-    );
-    const matrixPath = path.join(
-      __dirname,
-      "..",
-      "results",
-      "coverage-matrix.json",
-    );
-
-    if (!fs.existsSync(resultsPath) || !fs.existsSync(matrixPath)) {
-      console.log("Keine gespeicherten Analyseergebnisse gefunden.");
-      return res
-        .status(404)
-        .json({ error: "Keine Analyseergebnisse gefunden" });
-    }
-
-    // Lade gespeicherte Ergebnisse
-    const testResults = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
-    const coverageMatrix = JSON.parse(fs.readFileSync(matrixPath, "utf-8"));
-
-    // Kombiniere die Ergebnisse
-    const results = {
-      testMetadata: testResults,
-      coverageMatrix: coverageMatrix,
-      qualityMetrics: {
-        complexityScore: calculateQualityMetrics(testResults),
-        selectorTypes: analyzeSelectorTypes(testResults),
-        assertionCoverage: analyzeAssertionCoverage(testResults),
-      },
-    };
-
-    console.log(
-      `Gespeicherte Analyseergebnisse geladen: ${testResults.length} Tests`,
-    );
-    res.json(results);
-  } catch (error) {
-    console.error("Fehler beim Laden gespeicherter Analyseergebnisse:", error);
-    res.status(500).json({ error: "Fehler beim Laden der Analyseergebnisse" });
-  }
-});
 
 /**
  * Berechnet Qualitätsmetriken für die Testdateien

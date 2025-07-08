@@ -1,6 +1,6 @@
 # Evolution Hub UX-Test-Dashboard Projektdokumentation
 
-**Letzte Aktualisierung:** 2025-07-08T08:55:00+02:00
+**Letzte Aktualisierung:** 2025-07-09T00:15:00+02:00
 
 ## 1. Projektübersicht
 
@@ -8,9 +8,9 @@ Das UX-Test-Dashboard ist ein zentrales Tool zur Analyse, Ausführung und Überw
 
 ### 1.1 Aktuelle Version
 
-Server Version: `1.0.0-beta`  
-Dashboard Version: `1.0.0-beta`  
-Status: `In Entwicklung`
+Server Version: `1.0.0`  
+Dashboard Version: `1.0.0`  
+Status: `Einsatzbereit`
 
 ### 1.2 Roadmap-Status (Stand: 2025-07-08)
 
@@ -360,11 +360,99 @@ Es wurde ein detaillierter Migrationsplan erstellt, der die schrittweise und ink
 | API-Routen                     | Backend       | `/src/routes/*.ts`                               | Hoch        | ✅ Abgeschlossen |
 | Test-Analyse-Typen             | Backend       | `/src/types/test-analysis.ts`                    | Hoch        | ✅ Abgeschlossen |
 | Modularer Server               | Backend       | `/src/server.ts`                                 | Hoch        | 🚧 In Bearbeitung |
-| Flakiness-Visualisierung       | Frontend      | `/public/js/metrics/flakiness-view.js`           | Mittel      | 🚧 Geplant       |
-| Erfolgsraten-Visualisierung    | Frontend      | `/public/js/metrics/success-rate-view.js`        | Mittel      | 🚧 Geplant       |
-| Log-Visualisierung             | Frontend      | `/public/js/logs.js`                             | Niedrig     | 🚧 Geplant       |
+| Flakiness-Visualisierung       | Frontend      | `/public/js/metrics/flakiness-view.js`           | Mittel      | ✅ Migriert       |
+| Erfolgsraten-Visualisierung    | Frontend      | `/public/js/metrics/success-rate-view.js`        | Mittel      | ✅ Migriert       |
+| Log-Visualisierung             | Frontend      | `/public/js/logs.js`                             | Mittel      | ✅ Migriert       |
+| Test-Analyse-Visualisierung    | Frontend      | `/public/js/metrics-ts/test-analysis.ts`        | Mittel      | ✅ Implementiert  |
+| Dashboard-Controller           | Frontend      | `/public/js/metrics-ts/dashboard-init.ts`        | Hoch        | ✅ Implementiert  |
 | Test-Daten-Generator           | Utility       | `/scripts/generate-test-data.ts`                | Niedrig     | ✅ Migriert       |
 | Test-Metriken-Validator        | Utility       | `/scripts/test-metrics-validation.ts`           | Niedrig     | ✅ Migriert       |
+
+### 9.3 Frontend-Event-System
+
+Im Rahmen der TypeScript-Migration wurde ein neues modulares Event-basiertes Kommunikationssystem implementiert. Dieses System ersetzt die direkte Verwendung von globalen `window`-Objekten und verbessert die Modularität und Typ-Sicherheit.
+
+#### 9.3.1 Event-Typen
+
+Das Event-System verwendet standardisierte Event-Typen und Module-spezifische Event-Typen:
+
+| Event-Typ | Kategorie | Beschreibung | Verwendet von |
+|-----------|-----------|--------------|---------------|
+| `data:loading` | Dashboard | Signalisiert einen laufenden Ladevorgang | Alle Module |
+| `data:loaded` | Dashboard | Signalisiert erfolgreiche Datenladung | Alle Module |
+| `data:error` | Dashboard | Signalisiert einen Fehler bei der Datenverarbeitung | Alle Module |
+| `module:error` | Dashboard | Signalisiert einen Modulfehler | Alle Module |
+| `dashboard:initialized` | Dashboard | Signalisiert die vollständige Dashboard-Initialisierung | DashboardController |
+| `test-analysis:loading` | Test-Analyse | Signalisiert laufende Test-Analyse | Test-Analyse-Modul |
+| `test-analysis:loaded` | Test-Analyse | Signalisiert erfolgreiche Test-Analyse | Test-Analyse-Modul |
+| `test-analysis:error` | Test-Analyse | Signalisiert einen Test-Analyse-Fehler | Test-Analyse-Modul |
+| `logs:loading` | Logs | Signalisiert laufende Log-Ladung | Logs-Modul |
+| `logs:loaded` | Logs | Signalisiert erfolgreiche Log-Ladung | Logs-Modul |
+| `logs:error` | Logs | Signalisiert einen Log-Fehler | Logs-Modul |
+| `logs:filter-changed` | Logs | Signalisiert eine Log-Filteränderung | Logs-Modul |
+| `success-rate:loading` | Erfolgsraten | Signalisiert laufende Erfolgsraten-Ladung | Erfolgsraten-Modul |
+| `success-rate:loaded` | Erfolgsraten | Signalisiert erfolgreiche Erfolgsraten-Ladung | Erfolgsraten-Modul |
+| `success-rate:error` | Erfolgsraten | Signalisiert einen Erfolgsraten-Fehler | Erfolgsraten-Modul |
+| `success-rate:time-range-changed` | Erfolgsraten | Signalisiert eine Zeitbereichsänderung | Erfolgsraten-Modul |
+| `flakiness:loading` | Flakiness | Signalisiert laufende Flakiness-Ladung | Flakiness-Modul |
+| `flakiness:loaded` | Flakiness | Signalisiert erfolgreiche Flakiness-Ladung | Flakiness-Modul |
+| `flakiness:error` | Flakiness | Signalisiert einen Flakiness-Fehler | Flakiness-Modul |
+| `flakiness:days-changed` | Flakiness | Signalisiert eine Änderung des Tagesbereichs | Flakiness-Modul |
+
+#### 9.3.2 Event-Details
+
+Jedes Event trägt typisierte Nutzdaten in seiner `detail`-Eigenschaft:
+
+```typescript
+// Beispiel für Dashboard-Event-Details
+interface DashboardEventDetail {
+  source: string;        // Modul, das das Event ausgelöst hat
+  message?: string;      // Optionale Nachricht
+  data?: unknown;        // Optionale Daten
+  error?: Error | unknown; // Optionaler Fehler
+}
+
+// Beispiel für moduleigene Event-Details
+interface LogsEventDetail {
+  source: string;
+  message?: string;
+  data?: LogEntry[] | unknown;
+  error?: Error | unknown;
+  filter?: LogFilter;
+}
+```
+
+#### 9.3.3 Event-Dispatching
+
+Jedes Modul implementiert eine standardisierte Dispatch-Funktion, die sowohl moduleigene als auch Dashboard-weite Events sendet:
+
+```typescript
+function dispatchLogsEvent(eventType: LogsEventType, detail: Partial<LogsEventDetail>): void {
+  // Moduleigenes Event senden
+  const event = new CustomEvent(eventType, {
+    bubbles: true,
+    cancelable: true,
+    detail: { source: 'LogsViewer', ...detail }
+  });
+  document.dispatchEvent(event);
+  
+  // Auf Dashboard-Event mappen und senden
+  // z.B. logs:loading -> data:loading
+}
+```
+
+#### 9.3.4 Event-Listening
+
+Module können sowohl auf ihre eigenen Events als auch auf Dashboard-weite Events reagieren:
+
+```typescript
+document.addEventListener('data:loading', (event: Event) => {
+  const customEvent = event as CustomEvent<{source: string; message?: string}>;
+  if (customEvent.detail.source === 'LogsViewer') {
+    // Lade-Indikator anzeigen
+  }
+});
+```
 
 ## 10. Build-Struktur und Linting-Konfiguration
 
