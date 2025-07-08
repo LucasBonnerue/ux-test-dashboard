@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "outDir": "./public/js/dist",
+    "rootDir": "./",
+    "strict": false,
+    "skipLibCheck": true,
+    "declaration": false,
+    "sourceMap": true,
+    
+    // Einstellungen für die inkrementelle Migration
+    "allowJs": true,
+    "checkJs": false,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noImplicitAny": false,
+    
+    // DOM-Typen für das Frontend
+    "lib": ["DOM", "DOM.Iterable", "ESNext"]
+  },
+  "include": [
+    "public/js/metrics/**/*.js",
+    "public/js/metrics/**/*.ts",
+    "types/frontend/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "server.ts",
+    "routes/**/*",
+    "utils/**/*",
+    "scripts/**/*"
+  ]
+}

@@ -1,0 +1,16 @@
+# Standardmäßig ignorierte Verzeichnisse
+node_modules/
+dist/
+coverage/
+public/js/dist/
+public/js/vendor/
+public/js/metrics/archive/
+
+# Legacy-Dateien (werden durch TypeScript-Dateien ersetzt)
+server-complete.js
+
+# Build-Skripte
+scripts/js-to-ts-rename.js
+
+# Explizit nicht ignorieren - diese TypeScript-Dateien sollen geprüft werden
+!public/js/metrics-ts/*.ts
